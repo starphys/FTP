@@ -10,7 +10,7 @@ CMD_PORT = 21
 DAT_PORT = 2020
 BUFSIZ = 4096
 credentials = {'user':'pass'}
-jail_dir = os.path.join('C:/Users/starp/Documents/SJSU/cmpe148/FTP/', 'ftp/')
+jail_dir = os.path.join(os.path.curdir, 'ftp/')
 
 class FTPServer:
     def __init__(self, host=HOST, port=CMD_PORT):
@@ -22,7 +22,6 @@ class FTPServer:
 
     def listen(self):
         print(f'Server listening at {HOST}:{CMD_PORT}')
-        print(jail_dir)
 
         while True:
             cmd_socket, client_address = self.connection_socket.accept()
@@ -47,7 +46,6 @@ class FTPServer:
         data_conn_ready = False
 
         while True:
-            print("waiting for commands")
             request = cmd_socket.recv(BUFSIZ).decode()
             if not request:
                 self.can_connect.set()
@@ -91,7 +89,6 @@ class FTPServer:
             elif auth:
                 if cmd == 'PASV':
                     # One passive connection at a time
-                    print("Entered PASV case")
                     if data_socket is not None:
                         data_socket.close()
                         data_socket = None
@@ -102,27 +99,23 @@ class FTPServer:
                         pasv_socket = None
                         data_conn_ready = False
 
-                    print("Opening socket")
                     # Setup socket on any available port
                     pasv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     pasv_socket.bind(('127.0.0.1', 50888))
                     pasv_socket.listen(1)
                     
-                    print("Sending socket data")
                     ip, port = pasv_socket.getsockname()
                     h1, h2, h3, h4 = ip.split('.')
                     p1, p2 = port >> 8, port & 0xff
                     cmd_socket.sendall(f'227 Entering Passive Mode ({h1},{h2},{h3},{h4},{p1},{p2})\r\n'.encode('ascii'))
 
-                    print("Waiting for connection")
                     # Wait for data connection
                     data_socket, data_address = pasv_socket.accept()
                     data_conn_ready = True
-                    print('Accepted data connection')
                 # elif cmd == 'ABOR':
                     # Handle aborting data transfer...
                 # Optimize this by making dictionaries of commands and helper functions and just indexing into the dictionaries.
-                elif cmd in ['REST', 'RNFR', 'RNTO', 'DELE', 'RMD', 'MKD', 'PWD', 'SYST', 'STAT', 'TYPE']:
+                elif cmd in ['REST', 'RNFR', 'RNTO', 'FEAT', 'DELE', 'RMD', 'MKD', 'PWD', 'SYST', 'STAT', 'TYPE']:
                     if cmd == 'SYST':
                         cmd_socket.sendall(f'215 {platform.system()} {platform.release()}\r\n'.encode('ascii'))
                     elif cmd == 'PWD':
@@ -132,9 +125,9 @@ class FTPServer:
                             cmd_socket.sendall('200 ASCII supported.\r\n'.encode('ascii'))
                         else:
                             cmd_socket.sendall('504	Command not implemented for that parameter.\r\n'.encode('ascii'))
+                    else:
+                        cmd_socket.sendall('502 Command not implemented, superfluous at this site.\r\n'.encode('ascii'))   
 
-
-                        
                 elif not data_conn_ready:                   
                     cmd_socket.sendall('426	Connection closed; transfer aborted.\r\n'.encode('ascii'))
 
