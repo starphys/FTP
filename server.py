@@ -41,7 +41,6 @@ class FTPServer:
         username = ''
         cur_dir = jail_dir
         
-        pasv_socket = None
         data_socket = None
         data_conn_ready = False
 
@@ -69,10 +68,6 @@ class FTPServer:
                         data_socket = None
                         data_conn_ready = False
 
-                    if pasv_socket is not None:
-                        pasv_socket.close()
-                        pasv_socket = None
-                        data_conn_ready = False
                     cmd_socket.sendall('331 User name okay, need password\r\n'.encode('ascii'))
             elif cmd == 'PASS':
                 if credentials[username] == arg:
@@ -88,15 +83,10 @@ class FTPServer:
             # Everything else requires login 
             elif auth:
                 if cmd == 'PASV':
-                    # One passive connection at a time
+                    # Close any existing data sockets to prepare for the new passive connection
                     if data_socket is not None:
                         data_socket.close()
                         data_socket = None
-                        data_conn_ready = False
-
-                    if pasv_socket is not None:
-                        pasv_socket.close()
-                        pasv_socket = None
                         data_conn_ready = False
 
                     # Setup socket on any available port
@@ -109,9 +99,14 @@ class FTPServer:
                     p1, p2 = port >> 8, port & 0xff
                     cmd_socket.sendall(f'227 Entering Passive Mode ({h1},{h2},{h3},{h4},{p1},{p2})\r\n'.encode('ascii'))
 
-                    # Wait for data connection
-                    data_socket, data_address = pasv_socket.accept()
-                    data_conn_ready = True
+                    try:
+                        # Wait for the client to establish a data connection
+                        data_socket, _ = pasv_socket.accept()
+                        data_conn_ready = True
+                    except socket.timeout:
+                        cmd_socket.sendall('421 No connection was established within the timeout period.\r\n'.encode('ascii'))
+                    finally:
+                        pasv_socket.close()
                 # elif cmd == 'ABOR':
                     # Handle aborting data transfer...
                 # Optimize this by making dictionaries of commands and helper functions and just indexing into the dictionaries.
@@ -134,15 +129,11 @@ class FTPServer:
                 elif cmd in ['RETR', 'STOR', 'STOU', 'APPE', 'LIST', 'NLST']: #At this point we know we have a data connection
                     # These are all data transfer operations.
                     if cmd == 'LIST':
-                        cmd_socket.sendall('125 Data connection already open; transfer starting.\r\n'.encode('ascii'))
-                        self.handle_list(arg, cmd_socket, data_socket, cur_dir)
-                        print("Finished listing, time to shutdown the data socket.")
-                        
+                        cmd_socket.sendall('150	File status okay; about to open data connection.\r\n'.encode('ascii'))
+                        self.handle_list(arg, cmd_socket, data_socket, cur_dir)                        
                     data_socket.close()
                     data_socket = None
                     data_conn_ready = False
-                    pasv_socket.close()
-                    pasv_socket = None
                 else:
                     cmd_socket.sendall('502 Command not implemented, superfluous at this site.\r\n'.encode('ascii'))   
             else:
