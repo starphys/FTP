@@ -45,8 +45,12 @@ class FTPCommandHandler:
         return True
 
     def handle_type(self, arg):
-        if arg == 'A':
-            response = '200 ASCII supported.\r\n'
+        if arg.upper() == 'A':
+            self.client_session.encoding_mode = 'A'
+            response = '200 Switching to ASCII mode.\r\n'
+        elif arg.upper() == 'I':
+            self.client_session.encoding_mode = 'I'
+            response = '200 Switching to binary mode.\r\n'
         else:
             response = '504	Command not implemented for that parameter.\r\n'
         self.client_session.send_response(response)
@@ -103,6 +107,48 @@ class FTPCommandHandler:
             self.client_session.send_response('250 Directory successfully changed.\r\n')
         else:
             self.client_session.send_response('550 Failed to change directory.\r\n')
+        return True
+
+    def handle_retr(self, file_path):
+        # Resolve the path to ensure it's within the jail directory
+        resolved_path = self.client_session.resolve_path(file_path)
+        if resolved_path is None:
+            self.client_session.send_response('550 File not found.\r\n')
+            return True
+
+        try:
+            # Open the file in the appropriate mode based on the current encoding mode
+            mode = 'r' if self.client_session.encoding_mode == 'A' else 'rb'
+            with open(resolved_path, mode) as file:
+                # Ensure the data connection is ready
+                if not self.client_session.data_conn_ready:
+                    self.client_session.send_response('425 Can\'t open data connection.\r\n')
+                    return True
+
+                self.client_session.send_response('150 Opening data connection.\r\n')
+
+                # Read and send the file in chunks
+                while True:
+                    file_data = file.read(self.server.bufsiz)  # Use the same buffer size as for the command socket
+                    if not file_data:
+                        break  # End of file
+
+                    # If in ASCII mode, replace newline characters with CRLF
+                    if self.client_session.encoding_mode == 'A':
+                        file_data = file_data.replace(os.linesep, '\r\n')
+
+                    # Send data
+                    self.client_session.send_data(file_data)
+
+            self.client_session.send_response('226 Transfer complete.\r\n')
+        except FileNotFoundError:
+            self.client_session.send_response('550 File not found.\r\n')
+        except PermissionError:
+            self.client_session.send_response('550 Permission denied.\r\n')
+        finally:
+            # Clean up the data connection
+            self.client_session.close_data()
+
         return True
 
     def handle_no_auth(self, arg=None):

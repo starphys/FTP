@@ -9,12 +9,13 @@ CMD_PORT = 21
 BUFSIZ = 4096
 
 class FTPServer:
-    def __init__(self, host=HOST, port=CMD_PORT, jail_dir=None):
+    def __init__(self, host=HOST, port=CMD_PORT, jail_dir=None, bufsiz=BUFSIZ):
         self.connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connection_socket.bind((host, port))
         self.connection_socket.listen()
         self.credentials={'user':'pass'}
         self.jail_dir = jail_dir or os.path.join(os.path.curdir, './ftp/') 
+        self.bufsiz = bufsiz
         self.can_connect = threading.Event()
         self.can_connect.set()
 
@@ -40,7 +41,7 @@ class FTPServer:
         parser = FTPCommandParser(client_session, self)
         try:
             while True:
-                data = client_session.cmd_socket.recv(BUFSIZ).decode()
+                data = client_session.cmd_socket.recv(self.bufsiz).decode()
                 # If recv() returns an empty string, the client has closed the connection
                 if not data:
                     print("Client disconnected gracefully.")

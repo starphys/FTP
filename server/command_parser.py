@@ -18,7 +18,8 @@ class FTPCommandParser:
             # ['REST', 'RNFR', 'RNTO', 'FEAT', 'DELE', 'RMD', 'MKD', 'STAT']
         }
         self.data_command_map = {
-            'LIST':self.handler.handle_list
+            'LIST':self.handler.handle_list,
+            'RETR':self.handler.handle_retr
             # ['RETR', 'STOR', 'STOU', 'APPE', 'NLST']
         }
 

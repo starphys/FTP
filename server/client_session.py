@@ -9,14 +9,18 @@ class ClientSession:
         self.authenticated = False
         self.jail_dir = os.path.normpath(jail_dir)  # Ensure the path is normalized
         self.current_working_directory = self.jail_dir
+        self.encoding_mode = 'A'
 
     def send_response(self, message):
         if self.cmd_socket:
-            self.cmd_socket.sendall(message.encode('ascii'))
+                self.cmd_socket.sendall(message.encode('ascii'))
 
     def send_data(self, message):
         if self.data_socket:
-            self.data_socket.sendall(message.encode('ascii'))
+            if self.encoding_mode == 'A':
+                self.data_socket.sendall(message.encode('ascii'))
+            else:
+                self.data_socket.sendall(message)
 
     def close(self):
         if self.cmd_socket:
