@@ -8,6 +8,7 @@ class FTPCommandParser:
             'USER': self.handler.handle_user,
             'PASS': self.handler.handle_pass,
             'QUIT': self.handler.handle_quit
+            # [NOOP, HELP, SITE]
         }
         self.command_map = {
             'SYST': self.handler.handle_syst,
@@ -23,12 +24,14 @@ class FTPCommandParser:
             'DELE': self.handler.handle_dele,
             'RMD' : self.handler.handle_rmd,
             'MKD' : self.handler.handle_mkd
+            # [ACCT, CDUP, REIN, MODE, STRU, PORT, ALLO]
         }
         self.data_command_map = {
             'LIST': self.handler.handle_list,
             'RETR': self.handler.handle_retr,
             'STOR': self.handler.handle_stor,
             'APPE': self.handler.handle_appe
+            # [NLST,STOU]
         }
 
     def parse_command(self, data):
