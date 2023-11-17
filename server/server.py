@@ -1,4 +1,5 @@
 import os
+import queue
 import socket
 import threading
 from client_session import ClientSession
@@ -38,23 +39,47 @@ class FTPServer:
             transfer_thread.start()
 
     def handle_client(self, client_session):
-        parser = FTPCommandParser(client_session, self)
+        handler_thread = threading.Thread(target=self.handle_commands, args=(client_session,))
+        handler_thread.start()
+
         try:
-            while True:
+            while not client_session.shutdown_flag.is_set():
                 data = client_session.cmd_socket.recv(self.bufsiz).decode()
                 # If recv() returns an empty string, the client has closed the connection
                 if not data:
-                    print("Client disconnected gracefully.")
+                    print('Client disconnected gracefully.')
                     break
-                if not parser.parse_command(data):
-                    break
+
+                client_session.command_queue.put(data)
+                if data.startswith('ABOR'):
+                    client_session.abort_flag.set()
         except ConnectionError:
-            print("Connection error occurred.")
-        # except Exception as e:
-        #     print(f"An unexpected error occurred: {e}")
+            print('Connection error occurred.')
+        except Exception as e:
+            print(f'An unexpected error occurred: {e}')
         finally:
+            client_session.shutdown_flag.set()
+            handler_thread.join()
             self.cleanup(client_session)
 
+
+    def handle_commands(self, client_session):
+        parser = FTPCommandParser(client_session, self)
+        while not client_session.shutdown_flag.is_set():
+            try:
+                if client_session.abort_flag.is_set():
+                    # Clear the queue through the ABOR command
+                    client_session.abort_flag.clear()
+                    client_session.send_response('226 Closing data connection.\r\n')
+                    while not client_session.command_queue.empty() and not client_session.command_queue.get(timeout=.1).startswith('ABOR'):
+                        continue
+                command = client_session.command_queue.get(timeout=1)  # Adjust timeout as needed
+                if not parser.parse_command(command):
+                    client_session.shutdown_flag.set()
+                    break
+            except queue.Empty:
+                continue  # No command received, continue the loop
+    
     def cleanup(self, client_session):
         client_session.close()
         self.can_connect.set()

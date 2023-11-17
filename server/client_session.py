@@ -1,4 +1,6 @@
 import os
+import queue
+import threading
 
 class ClientSession:
     def __init__(self, cmd_socket, jail_dir):
@@ -10,6 +12,16 @@ class ClientSession:
         self.jail_dir = os.path.normpath(jail_dir)  # Ensure the path is normalized
         self.current_working_directory = self.jail_dir
         self.encoding_mode = 'A'
+        self.restart_offset = 0
+        self.rename_from_path = None
+
+        self.command_queue = queue.Queue()
+        self.abort_flag = threading.Event()
+        self.shutdown_flag = threading.Event()
+
+        self.abort_flag.clear()
+        self.shutdown_flag.clear()
+
 
     def send_response(self, message):
         if self.cmd_socket:
@@ -22,6 +34,13 @@ class ClientSession:
             else:
                 self.data_socket.sendall(message)
 
+    def receive_data(self, bufsiz):
+        if self.data_socket:
+            data = self.data_socket.recv(bufsiz)
+            if self.encoding_mode == 'A':
+                return data.decode('ascii')
+            return data
+            
     def close(self):
         if self.cmd_socket:
             self.cmd_socket.close()
@@ -62,7 +81,7 @@ class ClientSession:
         else:
             return os.path.relpath(self.current_working_directory, start=self.jail_dir)
     
-    def resolve_path(self, user_input):
+    def resolve_path(self, user_input, if_exists=True):
         # If the input is an option (e.g., starts with '-'), use the current working directory
         if user_input.startswith('-'):
             return self.current_working_directory
@@ -71,7 +90,8 @@ class ClientSession:
         user_path = os.path.normpath(os.path.join(self.current_working_directory, user_input))
         
         # Check if the path is within the jail directory and if it exists
-        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir) and os.path.exists(user_path):
+        print(user_path)
+        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir) and (if_exists == os.path.exists(user_path)):
             return user_path
         else:
             return None
