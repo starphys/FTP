@@ -24,6 +24,7 @@ class FTPClient:
             self.control_socket.close()
             self.control_socket = None
             raise
+        return True
 
     def authenticate(self, username, password):
         if not self.control_socket:
@@ -70,6 +71,7 @@ class FTPClient:
         self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.data_socket.connect((pasv_ip, pasv_port))
         self.pasv_mode = True
+        return True
 
     def list_directory(self, path=""):
         if not self.pasv_mode:
@@ -128,6 +130,7 @@ class FTPClient:
                     self.control_socket = None
 
         print("Connections closed.")
+        return True
 
     def send_command(self, command):
         if not self.control_socket:
@@ -139,7 +142,8 @@ class FTPClient:
         except Exception as e:
             print(f"An error occurred while sending command: {e}")
             raise
-    
+        return True
+
     def receive_data(self):
         if not self.data_socket:
             raise ConnectionError("Data connection not established.")
