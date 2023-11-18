@@ -8,19 +8,30 @@ class FTPCommandParser:
             'USER': self.handler.handle_user,
             'PASS': self.handler.handle_pass,
             'QUIT': self.handler.handle_quit
+            # [NOOP, HELP, SITE]
         }
         self.command_map = {
             'SYST': self.handler.handle_syst,
             'PWD' : self.handler.handle_pwd,
             'TYPE': self.handler.handle_type,
             'PASV': self.handler.handle_pasv,
-            'CWD' : self.handler.handle_cwd
-            # ['REST', 'RNFR', 'RNTO', 'FEAT', 'DELE', 'RMD', 'MKD', 'STAT']
+            'CWD' : self.handler.handle_cwd,
+            'REST': self.handler.handle_rest,
+            'RNFR': self.handler.handle_rnfr,
+            'RNTO': self.handler.handle_rnto,
+            'FEAT': self.handler.handle_feat,
+            'STAT': self.handler.handle_stat,
+            'DELE': self.handler.handle_dele,
+            'RMD' : self.handler.handle_rmd,
+            'MKD' : self.handler.handle_mkd
+            # [ACCT, CDUP, REIN, MODE, STRU, PORT, ALLO]
         }
         self.data_command_map = {
-            'LIST':self.handler.handle_list,
-            'RETR':self.handler.handle_retr
-            # ['RETR', 'STOR', 'STOU', 'APPE', 'NLST']
+            'LIST': self.handler.handle_list,
+            'RETR': self.handler.handle_retr,
+            'STOR': self.handler.handle_stor,
+            'APPE': self.handler.handle_appe
+            # [NLST,STOU]
         }
 
     def parse_command(self, data):
