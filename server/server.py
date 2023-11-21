@@ -17,7 +17,7 @@ class FTPServer:
         self.credentials={'user':'pass'}
         self.jail_dir = jail_dir or os.path.join(os.path.curdir, './ftp/') 
         self.bufsiz = bufsiz
-        self.can_connect = threading.Event()
+        self.can_connect = threading.Lock()
         self.can_connect.set()
 
     def listen(self):
@@ -27,12 +27,11 @@ class FTPServer:
             cmd_socket, client_address = self.connection_socket.accept()
             print(f'Connection attempt from {client_address}')
 
-            if not self.can_connect.is_set():
+            if not self.can_connect.acquire(blocking=False):
                 cmd_socket.sendall('421 Service not available, closing control connection.\r\n'.encode('ascii'))
                 cmd_socket.close()
                 continue
 
-            self.can_connect.clear()
             cmd_socket.sendall('220 Service ready for new user.\r\n'.encode('ascii'))
             client_session = ClientSession(cmd_socket, self.jail_dir)
             transfer_thread = threading.Thread(target=self.handle_client, args=(client_session,))
@@ -68,11 +67,14 @@ class FTPServer:
         while not client_session.shutdown_flag.is_set():
             try:
                 if client_session.abort_flag.is_set():
-                    # Clear the queue through the ABOR command
+                    # Clear the queue through the ABOR command (this should always just send 225, none of the rest of this code should be required)
                     client_session.abort_flag.clear()
-                    client_session.send_response('226 Closing data connection.\r\n')
                     while not client_session.command_queue.empty() and not client_session.command_queue.get(timeout=.1).startswith('ABOR'):
                         continue
+                    if client_session.data_conn_ready:
+                        client_session.send_response('225 Data connection open; no transfer in progress.\r\n')
+                    else:
+                        client_session.send_response('226 Closing data connection.\r\n')
                 command = client_session.command_queue.get(timeout=1)  # Adjust timeout as needed
                 if not parser.parse_command(command):
                     client_session.shutdown_flag.set()
@@ -82,7 +84,7 @@ class FTPServer:
     
     def cleanup(self, client_session):
         client_session.close()
-        self.can_connect.set()
+        self.can_connect.release()
         print('Cleanup complete, server ready for new connection.')
 
 

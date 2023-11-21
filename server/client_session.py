@@ -19,10 +19,6 @@ class ClientSession:
         self.abort_flag = threading.Event()
         self.shutdown_flag = threading.Event()
 
-        self.abort_flag.clear()
-        self.shutdown_flag.clear()
-
-
     def send_response(self, message):
         if self.cmd_socket:
                 self.cmd_socket.sendall(message.encode('ascii'))
