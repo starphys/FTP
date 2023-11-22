@@ -1,4 +1,4 @@
-from client import FTPClient
+from .ftp_client import FTPClient
 import threading
 import queue
 
@@ -17,7 +17,7 @@ class FTPClientFacade:
         self.ftp_thread = threading.Thread(target=self.handle_commands)
     
     def run(self):
-        self.ftp_thread.run()
+        self.ftp_thread.start()
     
     def enqueue(self, func):
         self.command_queue.put(func)
@@ -28,13 +28,14 @@ class FTPClientFacade:
         self.commands_ready.set()
         self.ftp_thread.join()
         self.client.close()
+        print("Facade closed")
 
     def handle_commands(self):
         while self.commands_ready.wait():
             if self.shutdown.is_set():
                 return
             try:
-                func = self.command_queue.get(timeout=1)
+                func = self.command_queue.get(block=False)
                 func()
             except queue.Empty:
                 self.commands_ready.clear()
@@ -47,12 +48,21 @@ class FTPClientFacade:
     def logout(self, callback=lambda x:x):
         callback(self.client.close())
 
-    def get_initial_data(self):
+    def get_initial_data(self, callback= lambda x:x):
         # Get current directory and list its contents
-        current_dir = self.client.get_current_directory()
-        directory_list = self.client.list_directory()
-        system_info = self.client.get_system_info()
-        return current_dir, directory_list, system_info
+        cur_dir, dir_list, sys_info = '', [], ''
+        responses = []
+        def push_response(response):
+            responses.append(response)
+        if self.client.send_pwd(callback=push_response):
+            _, _, dir = responses.pop().partition(' ')
+            cur_dir = dir
+
+        dir_list = self.client.list_dir()
+        if self.client.send_syst(callback=push_response):
+            _, _, info = responses.pop().partition(' ')
+            sys_info =  info
+        callback((cur_dir, dir_list, sys_info))
 
     def change_dir(self, dir):
         # Change the current directory

@@ -14,11 +14,10 @@ class FTPServer:
         self.connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connection_socket.bind((host, port))
         self.connection_socket.listen()
-        self.credentials={'user':'pass'}
+        self.credentials={'user':'pass', 'anonymous':''}
         self.jail_dir = jail_dir or os.path.join(os.path.curdir, './ftp/') 
         self.bufsiz = bufsiz
         self.can_connect = threading.Lock()
-        self.can_connect.set()
 
     def listen(self):
         print(f'Server listening at {HOST}:{CMD_PORT}')
@@ -50,6 +49,7 @@ class FTPServer:
                     break
 
                 client_session.command_queue.put(data)
+                client_session.commands_ready.set()
                 if data.startswith('ABOR'):
                     client_session.abort_flag.set()
         except ConnectionError:
@@ -64,23 +64,25 @@ class FTPServer:
 
     def handle_commands(self, client_session):
         parser = FTPCommandParser(client_session, self)
-        while not client_session.shutdown_flag.is_set():
+        while client_session.commands_ready.wait():
+            if client_session.shutdown_flag.is_set():
+                break
             try:
                 if client_session.abort_flag.is_set():
                     # Clear the queue through the ABOR command (this should always just send 225, none of the rest of this code should be required)
                     client_session.abort_flag.clear()
-                    while not client_session.command_queue.empty() and not client_session.command_queue.get(timeout=.1).startswith('ABOR'):
+                    while not client_session.command_queue.get(block=False).startswith('ABOR'):
                         continue
                     if client_session.data_conn_ready:
                         client_session.send_response('225 Data connection open; no transfer in progress.\r\n')
                     else:
                         client_session.send_response('226 Closing data connection.\r\n')
-                command = client_session.command_queue.get(timeout=1)
+                command = client_session.command_queue.get(block=False)
                 if not parser.parse_command(command):
                     client_session.shutdown_flag.set()
                     break
             except queue.Empty:
-                continue  # No command received, continue the loop
+                client_session.commands_ready.clear()
     
     def cleanup(self, client_session):
         client_session.close()

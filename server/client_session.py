@@ -18,6 +18,8 @@ class ClientSession:
         self.command_queue = queue.Queue()
         self.abort_flag = threading.Event()
         self.shutdown_flag = threading.Event()
+        self.commands_ready = threading.Event()
+
 
     def send_response(self, message):
         if self.cmd_socket:

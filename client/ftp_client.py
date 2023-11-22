@@ -17,20 +17,20 @@ class FTPClient:
             finally:
                 self.data_socket = None
         
-        if self.control_socket:
+        if self.cmd_socket:
             try:
                 self.send_quit()
             except Exception as e:
                 print(f"Error sending QUIT command: {e}")
             finally:
                 try:
-                    self.control_socket.close()
+                    self.cmd_socket.close()
                 except Exception as e:
                     print(f"Error closing control socket: {e}")
                 finally:
-                    self.control_socket = None
+                    self.cmd_socket = None
 
-        print("Connections closed.")
+        print("Client closed.")
         return True
 
 
@@ -39,7 +39,7 @@ class FTPClient:
         try:
             self.cmd_socket.connect((server_address, server_port))
 
-            welcome_message = self.cmd_socket.recv(self.bufsize).decode('ascii')
+            welcome_message = self.cmd_socket.recv(self.bufsize).decode('ascii').strip()
             print(welcome_message)
 
             if not welcome_message.startswith('220'):
@@ -51,24 +51,21 @@ class FTPClient:
             raise
         return True
     
-    # TODO: finish and test this
-    def connect_pasv(self, ip, port): 
-        self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def connect_pasv(self): 
         try:
-            self.cmd_socket.connect((ip, port))
-
-            welcome_message = self.cmd_socket.recv(self.bufsize).decode('ascii')
-            print(welcome_message)
-
-            if not welcome_message.startswith('220'):
-                raise ConnectionError('Failed to connect to the FTP server.')
+            pasv_dest = self.send_pasv()
+            self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.data_socket.connect(pasv_dest)
+            self.pasv_mode = True
         except Exception as e:
             print(f'An error occurred: {e}')
-            self.cmd_socket.close()
-            self.cmd_socket = None
+            self.data_socket.close()
+            self.data_socket = None
+            self.pasv_mode = False
             raise
         return True
 
+    # TODO: refactor this to remove the callback, this is a bad design
     def send_command(self, command='', argument='', success_code='', callback=None):
         if self.cmd_socket:
             argument = ' '+ argument if argument != '' else ''
@@ -101,10 +98,21 @@ class FTPClient:
         
     def recv_data(self):
         if self.data_socket:
-            data = self.data_socket.recv(self.bufsiz)
-            if self.encoding_mode == 'A':
-                return data.decode('ascii')
-            return data
+            data = []
+            while True:
+                chunk = self.data_socket.recv(self.bufsize)
+                if not chunk:
+                    break
+                if self.encoding_mode == 'A':
+                    data.append(chunk.decode('ascii'))
+                else:
+                    data.append(chunk)
+            # Close the data connection as we've received all the data
+            self.data_socket.close()
+            self.data_socket = None
+            self.pasv_mode = False
+            
+            return ''.join(data)
         else:
             raise ConnectionError("No data connection")
 
@@ -131,7 +139,16 @@ class FTPClient:
         return self.send_command('PWD', '', '257', callback)
 
     def send_pasv(self, callback=None):
-        return self.send_command('PASV', '', '227', callback)
+        pasv_info = { 'ip':'','port':0 }
+        def set_pasv_info(response):
+            ip_port_data = response[response.index('(')+1:response.index(')')].split(',')
+            pasv_info['ip'] = '.'.join(ip_port_data[:4])
+            pasv_info['port'] = (int(ip_port_data[4]) << 8) + int(ip_port_data[5])
+        if self.send_command('PASV', '', '227', set_pasv_info):
+            if callback: callback((pasv_info['ip'], pasv_info['port']))
+            return (pasv_info['ip'], pasv_info['port'])
+        if callback: callback((None, None))
+        return (None, None)
     
     def send_cwd(self, new_dir, callback=None):
         return self.send_command('CWD', new_dir, '250', callback)
@@ -177,8 +194,10 @@ class FTPClient:
     def send_appe(self, file_path, callback=None):
         return self.send_command('APPE', file_path, '150', callback)
     
-    # def auth_user():
-    #     None
+    def auth_user(self, username, password):
+        if self.send_user(username):
+            return self.send_pass(password)
+        return False
 
     # def send_file():
     #     None
@@ -189,58 +208,69 @@ class FTPClient:
     # def retr_file():
     #     None
     
-    # def list_dir():
-    #     None
-
-
-def main():
-    # Replace these with the actual server address and credentials
-    server_address = '127.0.0.1'
-    server_cmd_port = 21
-    bufsize = 4096
-    username = 'user'
-    password = 'pass'
-
-    # Initialize the FTP client instance
-    ftp_client = FTPClient(server_address, server_cmd_port, bufsize)
-    
-    try:
-        # Connect to the FTP server
-        print('Connecting to FTP server...')
-        ftp_client.connect()
-        print('Connected to FTP server.')
-
-        # Authenticate with the FTP server
-        print(f'Authenticating as {username}...')
-        if ftp_client.authenticate(username, password):
-            print('Authentication successful.')
+    def list_dir(self, file_path='', callback=None):
+        # Establish a passive connection
+        self.connect_pasv()
+        # Next send list on the command channel and check for 150
+        if self.send_list(file_path):
+            # We were successful, get the data
+            data = self.recv_data()
+            self.recv_response() # wait for final confirmation TODO: handle bad responses
+            if callback: callback(data)
+            return data
         else:
-            print('Authentication failed.')
-            return
+            callback([])
+            return []
 
-        # Enter passive mode
-        print('Entering passive mode...')
-        ftp_client.enter_passive_mode()
-        print('Passive mode entered successfully.')
 
-        # List directory contents
-        print('Listing directory contents...')
-        directory_listing = ftp_client.list_directory()  # Call with no argument to list the current directory
-        print('Directory listing received:')
-        print(directory_listing)
+# def main():
+#     # Replace these with the actual server address and credentials
+#     server_address = '127.0.0.1'
+#     server_cmd_port = 21
+#     bufsize = 4096
+#     username = 'user'
+#     password = 'pass'
 
-        # If you've reached this point, all the operations have been successful
-        print('All tests passed successfully.')
+#     # Initialize the FTP client instance
+#     ftp_client = FTPClient(server_address, server_cmd_port, bufsize)
+    
+#     try:
+#         # Connect to the FTP server
+#         print('Connecting to FTP server...')
+#         ftp_client.connect()
+#         print('Connected to FTP server.')
 
-    except ConnectionError as e:
-        print(f'Connection error: {e}')
-    except PermissionError as e:
-        print(f'Authentication error: {e}')
-    except Exception as e:
-        print(f'An unexpected error occurred: {e}')
-    finally:
-        # Ensure the client is closed properly
-        ftp_client.close()
+#         # Authenticate with the FTP server
+#         print(f'Authenticating as {username}...')
+#         if ftp_client.authenticate(username, password):
+#             print('Authentication successful.')
+#         else:
+#             print('Authentication failed.')
+#             return
 
-if __name__ == '__main__':
-    main()
+#         # Enter passive mode
+#         print('Entering passive mode...')
+#         ftp_client.enter_passive_mode()
+#         print('Passive mode entered successfully.')
+
+#         # List directory contents
+#         print('Listing directory contents...')
+#         directory_listing = ftp_client.list_directory()  # Call with no argument to list the current directory
+#         print('Directory listing received:')
+#         print(directory_listing)
+
+#         # If you've reached this point, all the operations have been successful
+#         print('All tests passed successfully.')
+
+#     except ConnectionError as e:
+#         print(f'Connection error: {e}')
+#     except PermissionError as e:
+#         print(f'Authentication error: {e}')
+#     except Exception as e:
+#         print(f'An unexpected error occurred: {e}')
+#     finally:
+#         # Ensure the client is closed properly
+#         ftp_client.close()
+
+# if __name__ == '__main__':
+#     main()
