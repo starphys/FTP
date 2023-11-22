@@ -75,7 +75,7 @@ class FTPServer:
                         client_session.send_response('225 Data connection open; no transfer in progress.\r\n')
                     else:
                         client_session.send_response('226 Closing data connection.\r\n')
-                command = client_session.command_queue.get(timeout=1)  # Adjust timeout as needed
+                command = client_session.command_queue.get(timeout=1)
                 if not parser.parse_command(command):
                     client_session.shutdown_flag.set()
                     break

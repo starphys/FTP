@@ -21,6 +21,7 @@ class FTPCommandHandler:
 
     def handle_pass(self, password):
         if self.client_session.username and \
+           self.client_session.username == 'anonymous' or \
            self.server.credentials.get(self.client_session.username) == password:
             self.client_session.authenticated = True
             response = '230 User logged in, proceed.\r\n'
@@ -136,7 +137,7 @@ class FTPCommandHandler:
     def handle_stat(self, arg=None):
         if not arg:
             # Server status information
-            response = ('211-FTP Server Status:\r\n' +
+            response = ('211 System status, or system help reply.\r\n' +
                         ' Version: MyFTPServer 1.0\r\n' +
                         f' Current user: {self.client_session.username or "None"}\r\n' +
                         f' Mode: {self.client_session.encoding_mode}\r\n' +
@@ -147,7 +148,8 @@ class FTPCommandHandler:
             resolved_path = self.client_session.resolve_path(arg)
             if resolved_path and os.path.exists(resolved_path):
                 file_info = format_file_stat(resolved_path)
-                response = (f'213-Status of {arg}:\r\n' +
+                response = (f'213 File status.\r\n' +
+                            'Status of {arg}:\r\n' +
                             f'{file_info}\r\n' +
                             '213 End of status\r\n')
             else:
