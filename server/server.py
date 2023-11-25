@@ -58,9 +58,9 @@ class FTPServer:
             print(f'An unexpected error occurred: {e}')
         finally:
             client_session.shutdown_flag.set()
+            client_session.commands_ready.set()
             handler_thread.join()
             self.cleanup(client_session)
-
 
     def handle_commands(self, client_session):
         parser = FTPCommandParser(client_session, self)

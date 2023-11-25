@@ -1,12 +1,15 @@
+import os
 import socket
 
 # Manages the internal state of the client and runs the 
 class FTPClient:
-    def __init__(self, bufsize):
-        self.bufsize = bufsize
+    def __init__(self, bufsiz):
+        self.bufsiz = bufsiz
         self.cmd_socket = None
         self.data_socket = None
         self.encoding_mode = 'A'
+        self.local_dir = os.path.expanduser('~')
+        self.remote_dir = '.' #This is just the string we get back from PWD, let the server resolve it to a true path
     
     def close(self):
         if self.data_socket:
@@ -39,7 +42,7 @@ class FTPClient:
         try:
             self.cmd_socket.connect((server_address, server_port))
 
-            welcome_message = self.cmd_socket.recv(self.bufsize).decode('ascii').strip()
+            welcome_message = self.cmd_socket.recv(self.bufsiz).decode('ascii').strip()
             print(welcome_message)
 
             if not welcome_message.startswith('220'):
@@ -83,7 +86,7 @@ class FTPClient:
     
     def recv_response(self):
         if self.cmd_socket:
-            return self.cmd_socket.recv(self.bufsize).decode('ascii')
+            return self.cmd_socket.recv(self.bufsiz).decode('ascii')
         else:
             raise ConnectionError("No command connection")
 
@@ -100,7 +103,7 @@ class FTPClient:
         if self.data_socket:
             data = []
             while True:
-                chunk = self.data_socket.recv(self.bufsize)
+                chunk = self.data_socket.recv(self.bufsiz)
                 if not chunk:
                     break
                 if self.encoding_mode == 'A':
@@ -127,7 +130,17 @@ class FTPClient:
         return self.send_command('QUIT', '', '', callback)
 
     def send_pwd(self, callback=None):
-        return self.send_command('PWD', '', '257', callback)
+        responses = []
+        def set_response(response):
+            responses.append(response)
+        ret = self.send_command('PWD', '', '257', set_response)
+        # Always update the client to reflect the server's folder
+        if ret:
+            print(responses)
+            _, _, dir = responses.pop().partition(' ')
+            self.remote_dir = dir
+            print(self.remote_dir)
+        return ret
     
     def send_syst(self, callback=None):
         return self.send_command('SYST', '', '215', callback)
@@ -151,7 +164,11 @@ class FTPClient:
         return (None, None)
     
     def send_cwd(self, new_dir, callback=None):
-        return self.send_command('CWD', new_dir, '250', callback)
+        if self.send_command('CWD', new_dir, '250', callback):
+            self.remote_dir = new_dir
+            print(self.remote_dir)
+            return True
+        return False
     
     def send_rest(self, offset, callback=None):
         return self.send_command('REST', offset, '350', callback)
@@ -199,15 +216,80 @@ class FTPClient:
             return self.send_pass(password)
         return False
 
-    # def send_file():
-    #     None
+    def send_file_mux(self, file_path, mode, callback=None):
+        if mode == 'a':
+            return self.send_appe(file_path, callback)
+        return self.send_stor(file_path, callback)
     
-    # def appe_file():
-    #     None
+    def upload_file(self, local_file_path, remote_file_path, mode, restart_offset=0, callback=None):
+        if not os.path.isabs(local_file_path):
+            local_file_path = os.path.join(self.local_dir, local_file_path)
+
+        if not os.path.isfile(local_file_path):
+            if callback: callback(False)
+            return False
+
+        _, extension = os.path.splitext(local_file_path)
+        if extension in {'.txt', '.csv'}:
+            self.encoding_mode = 'A'
+        else:
+            self.encoding_mode = 'I'
+        
+        if not self.send_type(self.encoding_mode):
+            # TODO: this needs to actually be handled
+            return False
+
+        # Open passive connection
+        self.connect_pasv()
+        # TODO: handle connection exceptions
+
+        if restart_offset:
+            self.send_rest(restart_offset)
+            # TODO: Check that this was successful
+
+        cmd_sent = self.send_file_mux(remote_file_path, mode, callback)
+        if cmd_sent:
+             # Open the file in the appropriate mode based on the current encoding mode
+            mode = 'r' if self.encoding_mode == 'A' else 'rb'
+            with open(local_file_path, mode) as file:
+                # Move to the restart offset if specified
+                if restart_offset:
+                    file.seek(restart_offset)
+
+                # Read and send the file in chunks
+                while True:
+                    file_data = file.read(self.bufsiz)  # Use the same buffer size as for the command socket
+                    if not file_data:
+                        break  # End of file
+
+                    # If in ASCII mode, replace newline characters with CRLF
+                    if self.encoding_mode == 'A':
+                        file_data = file_data.replace(os.linesep, '\r\n')
+
+                    # Send data
+                    self.send_data(file_data)
+
+                # Done sending, close socket
+                self.data_socket.close()
+                self.data_socket = None
+                self.pasv_mode = False
+
+                if not self.recv_response().startswith('226'):
+                    # Something went wrong
+                    # TODO: transfer may have failed due to type, try a second time with different type    
+                    return False
+            if callback: callback(True)
+            return True
+        if callback: callback(False)
+        return False
     
     # def retr_file():
     #     None
     
+    def delete_file(self, file_path, callback=None):
+        # The client and server should match folder locations, so no further handling is required
+        return self.send_dele(file_path)
+
     def list_dir(self, file_path='', callback=None):
         # Establish a passive connection
         self.connect_pasv()
@@ -219,58 +301,23 @@ class FTPClient:
             if callback: callback(data)
             return data
         else:
-            callback([])
+            if callback: callback([])
             return []
-
-
-# def main():
-#     # Replace these with the actual server address and credentials
-#     server_address = '127.0.0.1'
-#     server_cmd_port = 21
-#     bufsize = 4096
-#     username = 'user'
-#     password = 'pass'
-
-#     # Initialize the FTP client instance
-#     ftp_client = FTPClient(server_address, server_cmd_port, bufsize)
     
-#     try:
-#         # Connect to the FTP server
-#         print('Connecting to FTP server...')
-#         ftp_client.connect()
-#         print('Connected to FTP server.')
+    def set_local_dir(self, path):
+        # If relative path, combine with current local_dir value
+        if not os.path.isabs(path):
+            path = os.path.join(self.local_dir, path)
 
-#         # Authenticate with the FTP server
-#         print(f'Authenticating as {username}...')
-#         if ftp_client.authenticate(username, password):
-#             print('Authentication successful.')
-#         else:
-#             print('Authentication failed.')
-#             return
+        # Check if the path is valid (exists and is a directory)
+        if os.path.isdir(path):
+            self.local_dir = path
+            return True
+        return False
+    
+    def set_remote_dir(self, path):
+        # If relative path, combine with current remote_dir value
+        if not os.path.isabs(path):
+            path = os.path.join(self.remote_dir, path)
 
-#         # Enter passive mode
-#         print('Entering passive mode...')
-#         ftp_client.enter_passive_mode()
-#         print('Passive mode entered successfully.')
-
-#         # List directory contents
-#         print('Listing directory contents...')
-#         directory_listing = ftp_client.list_directory()  # Call with no argument to list the current directory
-#         print('Directory listing received:')
-#         print(directory_listing)
-
-#         # If you've reached this point, all the operations have been successful
-#         print('All tests passed successfully.')
-
-#     except ConnectionError as e:
-#         print(f'Connection error: {e}')
-#     except PermissionError as e:
-#         print(f'Authentication error: {e}')
-#     except Exception as e:
-#         print(f'An unexpected error occurred: {e}')
-#     finally:
-#         # Ensure the client is closed properly
-#         ftp_client.close()
-
-# if __name__ == '__main__':
-#     main()
+        return self.send_cwd(path)

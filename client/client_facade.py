@@ -68,12 +68,26 @@ class FTPClientFacade:
         # Change the current directory
         return self.client.change_directory(dir)
 
-    def upload_file(self, local_file_path, remote_file_path):
-        # Upload a file to the server
-        return self.client.upload_file(local_file_path, remote_file_path)
+    def upload_file(self, local_file_path, remote_file_path, mode, callback=lambda x:x):
+        ret = self.client.upload_file(local_file_path, remote_file_path, mode)
+        callback(ret)
+        return ret
     
     def download_file(self, remote_file_path, local_file_path):
         # Download a file from the server
         return self.client.download_file(remote_file_path, local_file_path)
     
-
+    def delete_file(self, remote_file_name, callback=lambda x:x):
+        ret = self.client.delete_file(remote_file_name)
+        callback(ret)
+        return ret
+    
+    def set_remote_dir(self, remote_dir, callback=lambda x:x):
+        ret = self.client.set_remote_dir(remote_dir)
+        callback(ret)
+        return ret
+    
+    def set_local_dir(self, local_dir, callback=lambda x:x):
+        ret = self.client.set_local_dir(local_dir)
+        callback(ret)
+        return ret

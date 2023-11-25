@@ -88,7 +88,6 @@ class ClientSession:
         user_path = os.path.normpath(os.path.join(self.current_working_directory, user_input))
         
         # Check if the path is within the jail directory and if it exists
-        print(user_path)
         if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir) and (if_exists == os.path.exists(user_path)):
             return user_path
         else:
