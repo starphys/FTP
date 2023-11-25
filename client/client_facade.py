@@ -42,52 +42,43 @@ class FTPClientFacade:
 
     # Functions passed by GUI, called by handler
     def login(self, server_ip='127.0.0.1', server_port=21, username='anonymous', password='pass', callback=lambda x: x):
-        self.client.connect_cmd(server_ip, server_port)
-        callback(self.client.auth_user(username, password))
+        if self.client.connect_cmd(server_ip, server_port):
+            callback(self.client.auth_user(username, password))
     
     def logout(self, callback=lambda x:x):
         callback(self.client.close())
 
     def get_initial_data(self, callback= lambda x:x):
         # Get current directory and list its contents
-        cur_dir, dir_list, sys_info = '', [], ''
-        responses = []
-        def push_response(response):
-            responses.append(response)
-        if self.client.send_pwd(callback=push_response):
-            _, _, dir = responses.pop().partition(' ')
-            cur_dir = dir
+        pwd_ret, pwd_code, cur_dir = self.client.send_pwd()
+        if not pwd_ret:
+            callback((pwd_ret, pwd_code, cur_dir))
 
-        dir_list = self.client.list_dir()
-        if self.client.send_syst(callback=push_response):
-            _, _, info = responses.pop().partition(' ')
-            sys_info =  info
-        callback((cur_dir, dir_list, sys_info))
-
-    def change_dir(self, dir):
-        # Change the current directory
-        return self.client.change_directory(dir)
+        list_ret, list_code, list_message, dir_list = self.client.list_dir()
+        if not list_ret:
+            callback((list_ret, list_code, list_message))
+        syst_ret, syst_code, syst_info = self.client.send_syst()
+        if not syst_ret:
+            callback((syst_ret, syst_code, syst_info))
+        callback((True, cur_dir, dir_list, syst_info))
 
     def upload_file(self, local_file_path, remote_file_path, mode, callback=lambda x:x):
-        ret = self.client.upload_file(local_file_path, remote_file_path, mode)
-        callback(ret)
-        return ret
+        callback(self.client.upload_file(local_file_path, remote_file_path, mode))
     
-    def download_file(self, remote_file_path, local_file_path):
-        # Download a file from the server
-        return self.client.download_file(remote_file_path, local_file_path)
+    def download_file(self, remote_file_path, local_file_path, restart_offset=0, callback=lambda x:x):
+        callback(self.client.download_file(remote_file_path, local_file_path, restart_offset))
     
     def delete_file(self, remote_file_name, callback=lambda x:x):
-        ret = self.client.delete_file(remote_file_name)
-        callback(ret)
-        return ret
+        callback(self.client.delete_file(remote_file_name))
     
     def set_remote_dir(self, remote_dir, callback=lambda x:x):
-        ret = self.client.set_remote_dir(remote_dir)
-        callback(ret)
-        return ret
+        callback(self.client.set_remote_dir(remote_dir))
     
     def set_local_dir(self, local_dir, callback=lambda x:x):
-        ret = self.client.set_local_dir(local_dir)
-        callback(ret)
-        return ret
+        callback(self.client.set_local_dir(local_dir))
+
+    def rename_remote_file(self, old_name, new_name, callback=lambda x:x):
+        ret, code, message = self.client.send_rnfr(old_name)
+        if ret:
+            callback(self.client.send_rnto(new_name))
+        callback((ret, code, message))

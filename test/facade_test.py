@@ -79,6 +79,20 @@ def test_set_local_dir(client):
         return True
     return False
 
+def test_set_remote_dir(client):
+    test_dir = "subfolder/"
+    responses = []
+    def set_responses(response):
+        responses.append(response)
+    def set_remote_dir():
+        client.set_remote_dir(test_dir, callback=set_responses)
+    client.enqueue(set_remote_dir)
+    while not responses:
+        time.sleep(0.1)
+    if responses.pop():
+        return True
+    return False
+
 def test_delete(client):
     test_file = 'send_text.txt'
     responses = []
@@ -93,18 +107,50 @@ def test_delete(client):
         return True
     return False
 
+def test_retrieve_file(client):
+    src_path = 'send_text.txt'
+    dest_path = 'send_text.txt'
+    responses = []
+    def set_responses(response):
+        responses.append(response)
+    def retrieve_file():
+        client.download_file(src_path, dest_path, callback=set_responses)
+    client.enqueue(retrieve_file)
+    while not responses:
+        time.sleep(0.1)
+    if responses.pop():
+        return True
+    return False
+
+def test_rename_remote_file(client):
+    old_name = 'send_text.txt'
+    new_name = 'renamed_text.txt'
+    responses = []
+    def set_responses(response):
+        responses.append(response)
+    def rename_file():
+        client.rename_remote_file(old_name, new_name, callback=set_responses)
+    client.enqueue(rename_file)
+    while not responses:
+        time.sleep(0.1)
+    if responses.pop():
+        return True
+    return False
+
 def test_facade():
     client = FTPClientFacade()
     client.run()
-    print(test_connect(client))
-    print(test_get_data(client))
-    print(test_set_local_dir(client))
-    print(test_send_file_default(client))
-    print(test_delete(client))
-    # test_get_file()
-    # test_send_file_default_append()
-    # Test change dir
-    test_disconnect(client)
+    print(f'Test: connect         Result: {test_connect(client)}')
+    print(f'Test: data            Result: {test_get_data(client)}')
+    print(f'Test: set local dir   Result: {test_set_local_dir(client)}')
+    print(f'Test: set remote dir  Result: {test_set_remote_dir(client)}')
+    print(f'Test: stor            Result: {test_send_file_default(client)}')
+    print(f'Test: append          Result: {test_send_file_append(client)}')
+    print(f'Test: retrieve        Result: {test_retrieve_file(client)}')
+    print(f'Test: rename remote   Result: {test_rename_remote_file(client)}')
+    # print(f'Test: delete          Result: {test_delete(client)}')
+
+    print(f'Test: disconnect.     Result: {test_disconnect(client)}')
     client.close()
     return
 

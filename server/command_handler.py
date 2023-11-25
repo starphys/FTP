@@ -284,7 +284,7 @@ class FTPCommandHandler:
         if not self.client_session.data_conn_ready:
             self.client_session.send_response('425 Cannot open data connection.\r\n')
             return True
-        resolved_path = self.client_session.resolve_path(file_path, False)
+        resolved_path = self.client_session.resolve_path(file_path)
         if resolved_path is None:
             self.client_session.send_response('550 Invalid path.\r\n')
             return True
@@ -323,7 +323,7 @@ class FTPCommandHandler:
         if not self.client_session.data_conn_ready:
             self.client_session.send_response('425 Cannot open data connection.\r\n')
             return True
-        resolved_path = self.client_session.resolve_path(file_path, False)
+        resolved_path = self.client_session.resolve_path(file_path)
         if resolved_path is None:
             self.client_session.send_response('550 Invalid path.\r\n')
             return True

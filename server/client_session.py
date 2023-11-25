@@ -79,7 +79,7 @@ class ClientSession:
         else:
             return os.path.relpath(self.current_working_directory, start=self.jail_dir)
     
-    def resolve_path(self, user_input, if_exists=True):
+    def resolve_path(self, user_input):
         # If the input is an option (e.g., starts with '-'), use the current working directory
         if user_input.startswith('-'):
             return self.current_working_directory
@@ -87,8 +87,8 @@ class ClientSession:
         # Attempt to resolve the provided path
         user_path = os.path.normpath(os.path.join(self.current_working_directory, user_input))
         
-        # Check if the path is within the jail directory and if it exists
-        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir) and (if_exists == os.path.exists(user_path)):
+        # Check if the path is within the jail directory
+        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir):
             return user_path
         else:
             return None
