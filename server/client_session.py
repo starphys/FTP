@@ -18,9 +18,7 @@ class ClientSession:
         self.command_queue = queue.Queue()
         self.abort_flag = threading.Event()
         self.shutdown_flag = threading.Event()
-
-        self.abort_flag.clear()
-        self.shutdown_flag.clear()
+        self.commands_ready = threading.Event()
 
 
     def send_response(self, message):
@@ -81,7 +79,10 @@ class ClientSession:
         else:
             return os.path.relpath(self.current_working_directory, start=self.jail_dir)
     
-    def resolve_path(self, user_input, if_exists=True):
+    def dir_is_root(self, dir):
+        return dir in {'.', '\\', '/'} or dir == self.jail_dir
+    
+    def resolve_path(self, user_input):
         # If the input is an option (e.g., starts with '-'), use the current working directory
         if user_input.startswith('-'):
             return self.current_working_directory
@@ -89,9 +90,8 @@ class ClientSession:
         # Attempt to resolve the provided path
         user_path = os.path.normpath(os.path.join(self.current_working_directory, user_input))
         
-        # Check if the path is within the jail directory and if it exists
-        print(user_path)
-        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir) and (if_exists == os.path.exists(user_path)):
+        # Check if the path is within the jail directory
+        if (os.path.commonprefix([self.jail_dir, user_path]) == self.jail_dir):
             return user_path
         else:
             return None

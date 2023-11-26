@@ -14,11 +14,10 @@ class FTPServer:
         self.connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connection_socket.bind((host, port))
         self.connection_socket.listen()
-        self.credentials={'user':'pass'}
+        self.credentials={'user':'pass', 'anonymous':''}
         self.jail_dir = jail_dir or os.path.join(os.path.curdir, './ftp/') 
         self.bufsiz = bufsiz
-        self.can_connect = threading.Event()
-        self.can_connect.set()
+        self.can_connect = threading.Lock()
 
     def listen(self):
         print(f'Server listening at {HOST}:{CMD_PORT}')
@@ -27,12 +26,11 @@ class FTPServer:
             cmd_socket, client_address = self.connection_socket.accept()
             print(f'Connection attempt from {client_address}')
 
-            if not self.can_connect.is_set():
+            if not self.can_connect.acquire(blocking=False):
                 cmd_socket.sendall('421 Service not available, closing control connection.\r\n'.encode('ascii'))
                 cmd_socket.close()
                 continue
 
-            self.can_connect.clear()
             cmd_socket.sendall('220 Service ready for new user.\r\n'.encode('ascii'))
             client_session = ClientSession(cmd_socket, self.jail_dir)
             transfer_thread = threading.Thread(target=self.handle_client, args=(client_session,))
@@ -51,6 +49,7 @@ class FTPServer:
                     break
 
                 client_session.command_queue.put(data)
+                client_session.commands_ready.set()
                 if data.startswith('ABOR'):
                     client_session.abort_flag.set()
         except ConnectionError:
@@ -59,30 +58,35 @@ class FTPServer:
             print(f'An unexpected error occurred: {e}')
         finally:
             client_session.shutdown_flag.set()
+            client_session.commands_ready.set()
             handler_thread.join()
             self.cleanup(client_session)
 
-
     def handle_commands(self, client_session):
         parser = FTPCommandParser(client_session, self)
-        while not client_session.shutdown_flag.is_set():
+        while client_session.commands_ready.wait():
+            if client_session.shutdown_flag.is_set():
+                break
             try:
                 if client_session.abort_flag.is_set():
-                    # Clear the queue through the ABOR command
+                    # Clear the queue through the ABOR command (this should always just send 225, none of the rest of this code should be required)
                     client_session.abort_flag.clear()
-                    client_session.send_response('226 Closing data connection.\r\n')
-                    while not client_session.command_queue.empty() and not client_session.command_queue.get(timeout=.1).startswith('ABOR'):
+                    while not client_session.command_queue.get(block=False).startswith('ABOR'):
                         continue
-                command = client_session.command_queue.get(timeout=1)  # Adjust timeout as needed
+                    if client_session.data_conn_ready:
+                        client_session.send_response('225 Data connection open; no transfer in progress.\r\n')
+                    else:
+                        client_session.send_response('226 Closing data connection.\r\n')
+                command = client_session.command_queue.get(block=False)
                 if not parser.parse_command(command):
                     client_session.shutdown_flag.set()
                     break
             except queue.Empty:
-                continue  # No command received, continue the loop
+                client_session.commands_ready.clear()
     
     def cleanup(self, client_session):
         client_session.close()
-        self.can_connect.set()
+        self.can_connect.release()
         print('Cleanup complete, server ready for new connection.')
 
 

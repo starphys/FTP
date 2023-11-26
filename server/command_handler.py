@@ -21,6 +21,7 @@ class FTPCommandHandler:
 
     def handle_pass(self, password):
         if self.client_session.username and \
+           self.client_session.username == 'anonymous' or \
            self.server.credentials.get(self.client_session.username) == password:
             self.client_session.authenticated = True
             response = '230 User logged in, proceed.\r\n'
@@ -136,7 +137,7 @@ class FTPCommandHandler:
     def handle_stat(self, arg=None):
         if not arg:
             # Server status information
-            response = ('211-FTP Server Status:\r\n' +
+            response = ('211 System status, or system help reply.\r\n' +
                         ' Version: MyFTPServer 1.0\r\n' +
                         f' Current user: {self.client_session.username or "None"}\r\n' +
                         f' Mode: {self.client_session.encoding_mode}\r\n' +
@@ -147,7 +148,8 @@ class FTPCommandHandler:
             resolved_path = self.client_session.resolve_path(arg)
             if resolved_path and os.path.exists(resolved_path):
                 file_info = format_file_stat(resolved_path)
-                response = (f'213-Status of {arg}:\r\n' +
+                response = (f'213 File status.\r\n' +
+                            'Status of {arg}:\r\n' +
                             f'{file_info}\r\n' +
                             '213 End of status\r\n')
             else:
@@ -174,7 +176,8 @@ class FTPCommandHandler:
 
     def handle_rmd(self, dir_path):
         resolved_path = self.client_session.resolve_path(dir_path)
-        if resolved_path is None or not os.path.isdir(resolved_path):
+        if resolved_path is None or self.client_session.current_working_directory == resolved_path or \
+            self.client_session.dir_is_root(resolved_path) or not os.path.isdir(resolved_path):
             self.client_session.send_response('550 Directory not found.\r\n')
             return True
 
@@ -214,10 +217,8 @@ class FTPCommandHandler:
 
         try:
             files = os.listdir(list_dir) + ['.', '..']
-            print(files)
             return_data = [format_file_stat(list_dir, file) for file in files]
             response = '\r\n'.join(return_data) + '\r\n'
-            print(response)
             self.client_session.send_data(response)
             self.client_session.send_response('226	Closing data connection. Requested file action successful.\r\n')
         except Exception as e:
@@ -281,17 +282,17 @@ class FTPCommandHandler:
         return True
 
     def handle_stor(self, file_path):
-        resolved_path = self.client_session.resolve_path(file_path, False)
+        if not self.client_session.data_conn_ready:
+            self.client_session.send_response('425 Cannot open data connection.\r\n')
+            return True
+        resolved_path = self.client_session.resolve_path(file_path)
         if resolved_path is None:
             self.client_session.send_response('550 Invalid path.\r\n')
             return True
 
         try:
-            with open(resolved_path, 'wb') as file:
-                if not self.client_session.data_conn_ready:
-                    self.client_session.send_response('425 Cannot open data connection.\r\n')
-                    return True
-                
+            mode = 'w' if self.client_session.encoding_mode == 'A' else 'wb'
+            with open(resolved_path, mode) as file:
                 if self.client_session.restart_offset:
                     file.seek(self.client_session.restart_offset)
                     self.client_session.restart_offset = 0
@@ -300,59 +301,62 @@ class FTPCommandHandler:
 
                 while True:
                     if self.client_session.abort_flag.is_set():
-                        self.client_session.send_response('426 Connection closed; transfer aborted.\r\n')
-                        self.client_session.close_data()
-                        self.client_session.send_response('226 Closing data connection.\r\n')
-                        return True
-
+                        raise RuntimeError("Transfer aborted by ABOR command.")
+                    
                     data = self.client_session.receive_data(self.server.bufsiz)
                     if not data:
                         break
                     file.write(data)
-
-                self.client_session.send_response('226 Transfer complete.\r\n')
         except OSError as e:
             self.client_session.send_response(f'550 File unavailable: {e.strerror}\r\n')
+            try: 
+                os.remove(resolved_path)
+            except OSError as cleanup_error:
+                print(f"Failed to clean up file: {cleanup_error}")
+        except RuntimeError as e:
+            self.client_session.send_response('426 Connection closed; transfer aborted.\r\n')
         finally:
             self.client_session.close_data()
-
+            self.client_session.send_response('226 Closing data connection.\r\n')
         return True
 
     def handle_appe(self, file_path):
-        resolved_path = self.client_session.resolve_path(file_path, False)
+        if not self.client_session.data_conn_ready:
+            self.client_session.send_response('425 Cannot open data connection.\r\n')
+            return True
+        resolved_path = self.client_session.resolve_path(file_path)
         if resolved_path is None:
             self.client_session.send_response('550 Invalid path.\r\n')
             return True
 
         try:
-            with open(resolved_path, 'ab') as file:
-                if not self.client_session.data_conn_ready:
-                    self.client_session.send_response('425 Cannot open data connection.\r\n')
-                    return True
-                
+            mode = 'a' if self.client_session.encoding_mode == 'A' else 'ab'
+            with open(resolved_path, mode) as file:
                 if self.client_session.restart_offset:
+                    file.seek(self.client_session.restart_offset)
                     self.client_session.restart_offset = 0
 
                 self.client_session.send_response('150 Ok to send data.\r\n')
 
                 while True:
                     if self.client_session.abort_flag.is_set():
-                        self.client_session.send_response('426 Connection closed; transfer aborted.\r\n')
-                        self.client_session.close_data()
-                        self.client_session.send_response('226 Closing data connection.\r\n')
-                        return True
-
+                        raise RuntimeError("Transfer aborted by ABOR command.")
+                    
                     data = self.client_session.receive_data(self.server.bufsiz)
                     if not data:
                         break
                     file.write(data)
-
-                self.client_session.send_response('226 Transfer complete.\r\n')
         except OSError as e:
             self.client_session.send_response(f'550 File unavailable: {e.strerror}\r\n')
+            try: 
+                os.remove(resolved_path)
+            except OSError as cleanup_error:
+                print(f"Failed to clean up file: {cleanup_error}")
+        except RuntimeError as e:
+            self.client_session.send_response('426 Connection closed; transfer aborted.\r\n')
         finally:
             self.client_session.close_data()
-
+            self.client_session.send_response('226 Closing data connection.\r\n')
         return True
         
     def handle_no_auth(self, arg=None):
