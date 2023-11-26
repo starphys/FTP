@@ -176,7 +176,8 @@ class FTPCommandHandler:
 
     def handle_rmd(self, dir_path):
         resolved_path = self.client_session.resolve_path(dir_path)
-        if resolved_path is None or not os.path.isdir(resolved_path):
+        if resolved_path is None or self.client_session.current_working_directory == resolved_path or \
+            self.client_session.dir_is_root(resolved_path) or not os.path.isdir(resolved_path):
             self.client_session.send_response('550 Directory not found.\r\n')
             return True
 

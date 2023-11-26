@@ -29,6 +29,7 @@ class FTPClientFacade:
         self.ftp_thread.join()
         self.client.close()
         print("Facade closed")
+        return True, '', ''
 
     def handle_commands(self):
         while self.commands_ready.wait():
@@ -73,6 +74,12 @@ class FTPClientFacade:
     
     def set_remote_dir(self, remote_dir, callback=lambda x:x):
         callback(self.client.set_remote_dir(remote_dir))
+
+    def make_remote_dir(self, remote_dir, callback=lambda x:x):
+        callback(self.client.send_mkd(remote_dir))
+
+    def delete_remote_dir(self, remote_dir, callback=lambda x:x):
+        callback(self.client.send_rmd(remote_dir))
     
     def set_local_dir(self, local_dir, callback=lambda x:x):
         callback(self.client.set_local_dir(local_dir))
@@ -82,3 +89,4 @@ class FTPClientFacade:
         if ret:
             callback(self.client.send_rnto(new_name))
         callback((ret, code, message))
+    

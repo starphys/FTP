@@ -2,6 +2,7 @@ from client import FTPClientFacade
 import os
 import time
 
+# TODO: turn these into actual test cases for unittest
 def test_connect(client):
     responses = []
     def set_responses(response):
@@ -11,7 +12,7 @@ def test_connect(client):
     client.enqueue(default_login)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -25,7 +26,7 @@ def test_get_data(client):
     while not responses:
         time.sleep(0.1)
     result = responses[0]
-    if result[0] == '' or not result[1] or result[2] == '':
+    if not result[0]:
         return False
     return True
 
@@ -38,7 +39,7 @@ def test_disconnect(client):
     client.enqueue(default_logout)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -53,20 +54,20 @@ def test_send_file(client, mode):
     client.enqueue(send_file)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
 def test_send_file_default(client):
     mode = 'w'
-    test_send_file(client, mode)
+    return test_send_file(client, mode)
     
 def test_send_file_append(client):
     mode = 'a'
-    test_send_file(client, mode)
+    return test_send_file(client, mode)
 
 def test_set_local_dir(client):
-    test_dir = "C:\\Users\\starp\\Documents\\SJSU\\cmpe148\\FTP\\test\\data"
+    test_dir = os.path.abspath("test/data")
     responses = []
     def set_responses(response):
         responses.append(response)
@@ -75,7 +76,7 @@ def test_set_local_dir(client):
     client.enqueue(set_local_dir)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -89,7 +90,7 @@ def test_set_remote_dir(client):
     client.enqueue(set_remote_dir)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -103,7 +104,7 @@ def test_delete(client):
     client.enqueue(delete_file)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -118,7 +119,7 @@ def test_retrieve_file(client):
     client.enqueue(retrieve_file)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
         return True
     return False
 
@@ -133,7 +134,35 @@ def test_rename_remote_file(client):
     client.enqueue(rename_file)
     while not responses:
         time.sleep(0.1)
-    if responses.pop():
+    if responses.pop()[0]:
+        return True
+    return False
+
+def test_make_remote_dir(client):
+    test_dir = "test_subfolder/"
+    responses = []
+    def set_responses(response):
+        responses.append(response)
+    def make_remote_dir():
+        client.make_remote_dir(test_dir, callback=set_responses)
+    client.enqueue(make_remote_dir)
+    while not responses:
+        time.sleep(0.1)
+    if responses.pop()[0]:
+        return True
+    return False
+
+def test_delete_remote_dir(client):
+    test_dir = "test_subfolder/"
+    responses = []
+    def set_responses(response):
+        responses.append(response)
+    def delete_remote_dir():
+        client.delete_remote_dir(test_dir, callback=set_responses)
+    client.enqueue(delete_remote_dir)
+    while not responses:
+        time.sleep(0.1)
+    if responses.pop()[0]:
         return True
     return False
 
@@ -144,15 +173,17 @@ def test_facade():
     print(f'Test: data            Result: {test_get_data(client)}')
     print(f'Test: set local dir   Result: {test_set_local_dir(client)}')
     print(f'Test: set remote dir  Result: {test_set_remote_dir(client)}')
+    print(f'Test: make remote dir  Result: {test_make_remote_dir(client)}')
     print(f'Test: stor            Result: {test_send_file_default(client)}')
     print(f'Test: append          Result: {test_send_file_append(client)}')
     print(f'Test: retrieve        Result: {test_retrieve_file(client)}')
     print(f'Test: rename remote   Result: {test_rename_remote_file(client)}')
-    # print(f'Test: delete          Result: {test_delete(client)}')
+    print(f'Test: delete          Result: {test_delete(client)}')
+    print(f'Test: rm remote dir  Result: {test_delete_remote_dir(client)}')
 
     print(f'Test: disconnect.     Result: {test_disconnect(client)}')
     client.close()
-    return
+    return True
 
 
 test_facade()

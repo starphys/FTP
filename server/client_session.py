@@ -79,6 +79,9 @@ class ClientSession:
         else:
             return os.path.relpath(self.current_working_directory, start=self.jail_dir)
     
+    def dir_is_root(self, dir):
+        return dir in {'.', '\\', '/'} or dir == self.jail_dir
+    
     def resolve_path(self, user_input):
         # If the input is an option (e.g., starts with '-'), use the current working directory
         if user_input.startswith('-'):

@@ -34,7 +34,7 @@ class FTPClient:
                     self.cmd_socket = None
 
         print("Client closed.")
-        return True
+        return True, '', ''
 
 
     def connect_cmd(self, server_address, server_port, ):
@@ -354,8 +354,8 @@ class FTPClient:
         # Check if the path is valid (exists and is a directory)
         if os.path.isdir(path):
             self.local_dir = path
-            return True
-        return False
+            return True, '', f'Local dir set to {path}'
+        return False, '', 'Local dir not changed'
     
     def set_remote_dir(self, path):
         # If relative path, combine with current remote_dir value
