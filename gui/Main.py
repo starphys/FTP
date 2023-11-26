@@ -1,19 +1,18 @@
 import tkinter as tk
 from tkinter import filedialog
-from Login import Login
-class FTPApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("File Transfer Protocol")
-        root.geometry("600x500")
- 
- 
+from .Login import LoginView
+class MainView(tk.Frame):
+    def __init__(self, parent, controller, on_disconnect):
+        super().__init__(parent)
+        self.controller = controller
+        self.on_disconnect = on_disconnect
+
         # Disconnect Button
-        self.disconnect_button = tk.Button(root, text="Disconnect", command=self.disconnect)
+        self.disconnect_button = tk.Button(self, text="Disconnect", command=self.disconnect)
         self.disconnect_button.pack(side=tk.TOP, anchor=tk.NE, padx=10, pady=10)
 
         # Left Panel
-        self.left_frame = tk.Frame(root, padx=10, pady=10)
+        self.left_frame = tk.Frame(self, padx=10, pady=10)
         self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self.upload_label = tk.Label(self.left_frame, text="Please choose the file to upload")
@@ -31,7 +30,7 @@ class FTPApp:
         self.upload_button.pack(pady=10)
 
         # Right Panel
-        self.right_frame = tk.Frame(root, padx=10, pady=10)
+        self.right_frame = tk.Frame(self, padx=10, pady=10)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         self.download_label = tk.Label(self.right_frame, text="Please select the file to download")
@@ -57,18 +56,6 @@ class FTPApp:
         selected_index = self.download_listbox.curselection()
         if selected_index:
             selected_file = self.download_listbox.get(selected_index)
-            # Add your download logic here using the selected_file path
 
     def disconnect(self):
-        
-        self.root.destroy()
-        new_root = tk.Tk()
-        new_app = Login(new_root)
-        new_root.mainloop()
-
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = FTPApp(root)
-    root.mainloop()
+        self.on_disconnect()
