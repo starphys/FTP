@@ -359,9 +359,5 @@ class FTPClient:
     
     def set_remote_dir(self, path):
         # If relative path, combine with current remote_dir value
-        if not os.path.isabs(path):
-            path = os.path.join(self.remote_dir, path)
-        ret, code, message = self.send_cwd(path)
-        if ret:
-            return self.list_dir()
-        return ret, code, message, []
+        return self.send_cwd(path)
+ 
