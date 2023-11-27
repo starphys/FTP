@@ -24,6 +24,7 @@ class FTPApp(tk.Tk):
     def on_login_success(self):
         self.login_view.hide()
 
+        self.request_remote_data()
         # TODO: get data from ftp and os for initial display, pass to mainview
 
         self.main_view.tkraise()
@@ -43,6 +44,23 @@ class FTPApp(tk.Tk):
     def logout(self):
         self.ftp.logout()
         self.show_login()
+
+    def request_remote_data(self):
+        self.ftp.get_initial_data(self.on_remote_data_received)
+
+    def on_remote_data_received(self, data):
+        # Successfully got data
+        if data[0]:
+            self.main_view.remote_path = data[1]
+            self.main_view.update_remote_files(data[2])
+        # Failed to get data
+        else:
+            # TODO: handle list error
+            pass
+
+    def set_remote_directory(self, directory_name):
+        # TODO: handle change dir error
+        self.ftp.set_remote_dir(directory_name, lambda result: self.request_remote_data() if result[0] else result)
 
 if __name__ == "__main__":
     ftp = FTPClientFacade()  # Initialize your FTPClientFacade

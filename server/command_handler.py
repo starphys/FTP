@@ -216,7 +216,7 @@ class FTPCommandHandler:
             return True
 
         try:
-            files = os.listdir(list_dir) + ['.', '..']
+            files = os.listdir(list_dir) + ['.'] if self.client_session.dir_is_root(list_dir) else ['.', '..']
             return_data = [format_file_stat(list_dir, file) for file in files]
             response = '\r\n'.join(return_data) + '\r\n'
             self.client_session.send_data(response)
