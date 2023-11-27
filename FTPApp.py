@@ -1,5 +1,6 @@
 from client import FTPClientFacade
 from gui import LoginView, MainView
+import os
 import tkinter as tk
 
 class FTPApp(tk.Tk):
@@ -61,6 +62,61 @@ class FTPApp(tk.Tk):
     def set_remote_directory(self, directory_name):
         # TODO: handle change dir error
         self.ftp.set_remote_dir(directory_name, lambda result: self.request_remote_data() if result[0] else result)
+    
+    def set_local_directory(self, directory_name):
+        self.ftp.set_local_dir(directory_name)
+    
+    def delete_local_item(self, current_dir, item_name):
+        try:
+            os.remove(os.path.join(current_dir, item_name))
+            self.main_view.display_local_files()
+        except OSError as e:
+            print(e)
+            # TODO: handle failure here, this will come up a lot
+
+    def delete_remote_directory(self, item_name):
+        self.ftp.delete_remote_dir(item_name, lambda result: self.request_remote_data() if result[0] else result)
+        # TODO: handle failure
+
+    def delete_remote_file(self, item_name):
+        self.ftp.delete_file(item_name, lambda result: self.request_remote_data() if result[0] else result)
+        # TODO: handle failure
+    
+    def rename_local_file(self, local_path, old_name, new_name):
+        old_path = os.path.join(local_path, old_name)
+        new_path = os.path.join(local_path, new_name)
+        try:
+            os.rename(old_path, new_path)
+            self.main_view.display_local_files()
+        except OSError as e:
+            print(e)
+            # TODO: handle failure here, this will come up a lot
+    
+    def rename_remote_file(self, old_name, new_name):
+        self.ftp.rename_remote_file(old_name, new_name, lambda result: self.request_remote_data() if result[0] else result)
+
+    def create_local_directory(self, local_path, dir_name):
+        new_dir_path = os.path.join(local_path, dir_name)
+        try:
+            os.makedirs(new_dir_path, exist_ok=True)
+            self.main_view.display_local_files()
+        except OSError as e:
+            print(e)
+            # TODO: handle failure here, this will come up a lot
+
+    def create_remote_directory(self, dir_name):
+        self.ftp.make_remote_dir(dir_name, lambda result: self.request_remote_data() if result[0] else result)
+        # TODO: handle failure here, this will come up a lot
+
+    def upload_file(self, file_path, destination_name, action):
+        if action == 'overwrite':
+            self.ftp.upload_file(file_path, destination_name, 'w', lambda result: self.request_remote_data() if result[0] else result)
+        else:
+            self.ftp.upload_file(file_path, destination_name, 'a', lambda result: self.request_remote_data() if result[0] else result)
+
+    def download_file(self, file_path, destination_name):
+        self.ftp.download_file(file_path, destination_name, callback=lambda result: self.main_view.display_local_files() if result[0] else result)
+
 
 if __name__ == "__main__":
     ftp = FTPClientFacade()  # Initialize your FTPClientFacade
