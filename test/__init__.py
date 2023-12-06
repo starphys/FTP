@@ -1,4 +1,5 @@
-from .test_facade import test_facade
+import unittest
+from .test_facade import TestFTPClientFacade
 
 if __name__ == '__main__':
-    test_facade()
+    unittest.main()
