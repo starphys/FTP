@@ -83,7 +83,7 @@ def test_set_remote_dir(client):
     return False
 
 def test_delete(client):
-    test_file = 'send_text.txt'
+    test_file = 'renamed_text.txt'
     responses = []
     def set_responses(response):
         responses.append(response)
